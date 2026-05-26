@@ -20,6 +20,14 @@ const groups: SuggestionGroup[] = [
       { label: "Termux:X11", value: "https://wiki.termux.com/wiki/Graphical_Environment", helper: "GUI bridge for Android" },
       { label: "Prism README", value: "https://github.com/ntun7729/browser", helper: "Project install notes" }
     ]
+  },
+  {
+    title: "Cloudflare",
+    items: [
+      { label: "Workers docs", value: "https://developers.cloudflare.com/workers/", helper: "Runtime and APIs" },
+      { label: "Wrangler config", value: "https://developers.cloudflare.com/workers/wrangler/configuration/", helper: "Project setup details" },
+      { label: "HTMLRewriter", value: "https://developers.cloudflare.com/workers/runtime-apis/html-rewriter/", helper: "Proxy response rewriting" }
+    ]
   }
 ];
 
