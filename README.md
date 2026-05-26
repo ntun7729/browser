@@ -1,6 +1,11 @@
 # Prism Browser
 
-Prism Browser is a polished v1 browser shell built with Electron, Vite, React, and TypeScript. The project is tuned for practical development on laptops and for running inside Ubuntu under Termux `proot` where heavy packaging layers would make setup harder than it needs to be.
+Prism Browser is a polished browser workspace with two runtime targets:
+
+- Electron for a full desktop shell with native `webview` browsing
+- Cloudflare Workers for a deployable web edition served through Wrangler
+
+The project stays intentionally light: Vite, React, TypeScript, plain CSS, and a small Worker script instead of a heavy framework stack.
 
 ## Why this architecture
 
@@ -8,6 +13,7 @@ Prism Browser is a polished v1 browser shell built with Electron, Vite, React, a
 - Vite keeps renderer iteration fast and simple.
 - React plus small local state keeps the UI maintainable without adding a state-management framework on day one.
 - Plain CSS delivers a premium visual treatment without bringing in a design system dependency chain that would make Termux and proot setup heavier.
+- Cloudflare Workers adds a lightweight edge deployment path for the same UI, with a Worker proxy handling external page rendering for the web edition.
 
 ## Project structure
 
@@ -16,10 +22,12 @@ browser/
 ├── electron/              # Native shell, window boot, secure preload bridge
 ├── scripts/               # Lightweight dev helpers
 ├── src/                   # Browser UI, state, and components
+├── worker/                # Cloudflare Worker proxy and asset entry
 ├── index.html             # Renderer entry
 ├── package.json           # Scripts and dependencies
 ├── tsconfig*.json         # Separate app and Electron TypeScript configs
-└── vite.config.ts         # Renderer build configuration
+├── vite.config.ts         # Renderer build configuration
+└── wrangler.jsonc         # Cloudflare Worker configuration
 ```
 
 ## Features in v1
@@ -29,19 +37,73 @@ browser/
 - Back, forward, reload, and home navigation controls
 - Premium two-pane browser layout with responsive adaptation for narrow windows
 - Quick-launch panel for common developer and setup destinations
+- Cloudflare Worker proxy mode for deployable browser-like web sessions
 - TypeScript-first structure that can grow into bookmarks, history, and split view
+
+## Runtime modes
+
+### Electron mode
+
+- Uses native Electron `webview`
+- Best option for desktop browsing and Termux `proot` Ubuntu
+- Keeps real browser-style navigation behavior
+
+### Cloudflare Worker mode
+
+- Uses the same React UI
+- Serves the app and proxy API through Wrangler
+- Renders external pages inside an iframe backed by `/api/proxy`
+- Rewrites common HTML asset and navigation URLs through the Worker
+
+This makes the app deployable on Cloudflare Workers, but it is still a browser-like workspace rather than a perfect replacement for a full browser engine. Some sites with strict login, storage, or origin assumptions may not behave perfectly in Worker mode.
 
 ## Install on a laptop or Linux desktop
 
 1. Install Node.js 20 or newer.
 2. Clone the repository.
 3. Run `npm install`.
-4. Run `npm run dev`.
+4. Run `npm run dev:electron`.
 
 For a production-style local run:
 
 1. Run `npm run build`.
 2. Run `npm start`.
+
+## Run with Wrangler on Cloudflare Workers
+
+### Local Worker preview
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Start the Worker-backed build:
+
+```bash
+npm run dev:worker
+```
+
+This builds the Vite client into `dist/renderer` and serves it through Wrangler with the Worker proxy enabled.
+
+### Deploy to Cloudflare
+
+1. Authenticate Wrangler:
+
+```bash
+npx wrangler login
+```
+
+2. Deploy:
+
+```bash
+npm run deploy:worker
+```
+
+The Worker configuration lives in `wrangler.jsonc`. It uses Cloudflare static assets for the front end and runs the Worker first for `/api/*` routes.
+
+The Worker entry file is `worker/index.js`, and the client build it serves is `dist/renderer`.
 
 ## Install and run in Termux with proot Ubuntu
 
@@ -102,14 +164,14 @@ export PRISM_DISABLE_CHROMIUM_SANDBOX=1
 git clone https://github.com/ntun7729/browser.git
 cd browser
 npm install
-npm run dev
+npm run dev:electron
 ```
 
 If GPU acceleration is unstable on your device, try:
 
 ```bash
 export ELECTRON_DISABLE_GPU=1
-npm run dev
+npm run dev:electron
 ```
 
 If the app starts but renders a blank or unstable window in your specific Android setup, try this slightly more defensive launch:
@@ -118,7 +180,7 @@ If the app starts but renders a blank or unstable window in your specific Androi
 export LIBGL_ALWAYS_SOFTWARE=1
 export ELECTRON_DISABLE_GPU=1
 export PRISM_DISABLE_CHROMIUM_SANDBOX=1
-npm run dev
+npm run dev:electron
 ```
 
 ## Next development targets
@@ -127,4 +189,5 @@ npm run dev
 - split-view browsing
 - session restore and pinned workspace profiles
 - reader mode and download management
+- tighter proxy rewriting for more complex sites in Worker mode
 - Linux packaging once the shell and UX stabilize
