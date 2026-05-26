@@ -6,6 +6,8 @@ export interface BrowserTab {
   url: string;
   accent: string;
   status: TabStatus;
+  history: string[];
+  historyIndex: number;
   canGoBack: boolean;
   canGoForward: boolean;
   isPinned?: boolean;
