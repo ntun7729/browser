@@ -7,13 +7,21 @@ import { WelcomePanel } from "./components/WelcomePanel";
 import { getDomainLabel, normalizeUrl } from "./lib/browser";
 import { DEFAULT_HOME_URL } from "./lib/constants";
 import { useBrowserState } from "./hooks/useBrowserState";
+import { getViewportSrc } from "./lib/proxy";
+import { getPlatformLabel, getRuntimeEngine, getRuntimeLabel, isDesktopRuntime } from "./lib/runtime";
 
 function App() {
   const { state, activeTab, dispatch } = useBrowserState();
   const webviewRefs = useRef<Record<string, Electron.WebviewTag | null>>({});
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
   const omnibarRef = useRef<HTMLInputElement>(null);
+  const desktopRuntime = isDesktopRuntime();
 
   useEffect(() => {
+    if (!desktopRuntime) {
+      return;
+    }
+
     state.tabs.forEach((tab) => {
       const webview = webviewRefs.current[tab.id];
 
@@ -63,7 +71,7 @@ function App() {
         });
       });
     });
-  }, [dispatch, state.tabs]);
+  }, [desktopRuntime, dispatch, state.tabs]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -96,7 +104,7 @@ function App() {
 
       if (key === "r") {
         event.preventDefault();
-        withActiveWebview((webview) => webview.reload());
+        reloadActiveTab();
       }
     };
 
@@ -107,7 +115,7 @@ function App() {
   const metrics = useMemo(
     () => [
       { label: "Tabs", value: String(state.tabs.length) },
-      { label: "Runtime", value: window.prismDesktop?.version ? "Electron" : "Shell" },
+      { label: "Runtime", value: getRuntimeLabel() },
       { label: "Focus", value: activeTab.status }
     ],
     [activeTab.status, state.tabs.length]
@@ -116,8 +124,82 @@ function App() {
   const navigateActiveTab = (input: string) => {
     const url = normalizeUrl(input);
     dispatch({ type: "navigate", id: activeTab.id, url });
-    const webview = webviewRefs.current[activeTab.id];
-    webview?.loadURL(url);
+
+    if (desktopRuntime) {
+      const webview = webviewRefs.current[activeTab.id];
+      webview?.loadURL(url);
+    }
+  };
+
+  const goHistory = (direction: "back" | "forward") => {
+    if (desktopRuntime) {
+      const webview = webviewRefs.current[activeTab.id];
+      if (!webview) {
+        return;
+      }
+
+      if (direction === "back") {
+        webview.goBack();
+      } else {
+        webview.goForward();
+      }
+      return;
+    }
+
+    dispatch({ type: "step-history", id: activeTab.id, direction });
+  };
+
+  const reloadActiveTab = () => {
+    if (desktopRuntime) {
+      withActiveWebview((webview) => {
+        if (activeTab.status === "loading") {
+          webview.stop();
+          return;
+        }
+        webview.reload();
+      });
+      return;
+    }
+
+    const iframe = iframeRefs.current[activeTab.id];
+    if (!iframe) {
+      return;
+    }
+
+    dispatch({
+      type: "update",
+      id: activeTab.id,
+      patch: { status: "loading" }
+    });
+    iframe.src = getViewportSrc(activeTab.url);
+  };
+
+  const handleIframeLoad = (tabId: string) => {
+    const iframe = iframeRefs.current[tabId];
+    const tab = state.tabs.find((entry) => entry.id === tabId);
+
+    if (!iframe || !tab) {
+      return;
+    }
+
+    let title = getDomainLabel(tab.url);
+
+    try {
+      title = iframe.contentDocument?.title || title;
+    } catch {
+      title = getDomainLabel(tab.url);
+    }
+
+    dispatch({
+      type: "update",
+      id: tabId,
+      patch: {
+        status: "ready",
+        title,
+        canGoBack: tab.historyIndex > 0,
+        canGoForward: tab.historyIndex < tab.history.length - 1
+      }
+    });
   };
 
   const withActiveWebview = (callback: (webview: Electron.WebviewTag) => void) => {
@@ -153,26 +235,10 @@ function App() {
             inputRef={omnibarRef}
             isLoading={activeTab.status === "loading"}
             onDraftChange={(value) => dispatch({ type: "set-draft", value })}
-            onGoBack={() =>
-              withActiveWebview((webview) => {
-                webview.goBack();
-              })
-            }
-            onGoForward={() =>
-              withActiveWebview((webview) => {
-                webview.goForward();
-              })
-            }
+            onGoBack={() => goHistory("back")}
+            onGoForward={() => goHistory("forward")}
             onHome={() => navigateActiveTab(DEFAULT_HOME_URL)}
-            onReload={() =>
-              withActiveWebview((webview) => {
-                if (activeTab.status === "loading") {
-                  webview.stop();
-                  return;
-                }
-                webview.reload();
-              })
-            }
+            onReload={reloadActiveTab}
             onSubmit={() => navigateActiveTab(state.draftUrl)}
           />
 
@@ -198,8 +264,8 @@ function App() {
             <WelcomePanel onLaunch={navigateActiveTab} />
             <SessionPanel
               activeTitle={activeTab.title}
-              engine={window.prismDesktop?.version ?? "webview"}
-              platform={window.prismDesktop?.platform ?? "linux"}
+              engine={getRuntimeEngine()}
+              platform={getPlatformLabel()}
             />
           </div>
 
@@ -215,6 +281,9 @@ function App() {
                     <strong>{tab.title}</strong>
                     <span>{tab.url}</span>
                   </div>
+                  {!desktopRuntime && (
+                    <span className="runtime-badge">Worker proxy</span>
+                  )}
                   {!tab.isPinned && (
                     <button
                       onClick={() => dispatch({ type: "close", id: tab.id })}
@@ -225,14 +294,27 @@ function App() {
                   )}
                 </div>
 
-                <webview
-                  className="browser-webview"
-                  partition="persist:prism"
-                  ref={(node) => {
-                    webviewRefs.current[tab.id] = node;
-                  }}
-                  src={tab.url}
-                />
+                {desktopRuntime ? (
+                  <webview
+                    className="browser-webview"
+                    partition="persist:prism"
+                    ref={(node) => {
+                      webviewRefs.current[tab.id] = node;
+                    }}
+                    src={tab.url}
+                  />
+                ) : (
+                  <iframe
+                    className="browser-iframe"
+                    onLoad={() => handleIframeLoad(tab.id)}
+                    ref={(node) => {
+                      iframeRefs.current[tab.id] = node;
+                    }}
+                    sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts"
+                    src={getViewportSrc(tab.url)}
+                    title={tab.title}
+                  />
+                )}
               </div>
             ))}
           </div>
