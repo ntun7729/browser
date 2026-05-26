@@ -14,8 +14,8 @@
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "preview": "vite preview --host 0.0.0.0",
-    "dev:worker": "npm run build:web && wrangler dev",
-    "deploy:worker": "npm run build:web && wrangler deploy"
+    "dev:worker": "npm run build:web && node ./scripts/run-wrangler.mjs dev",
+    "deploy:worker": "npm run build:web && node ./scripts/run-wrangler.mjs deploy"
   },
   "dependencies": {
     "react": "^18.3.1",
