@@ -15,6 +15,7 @@ type BrowserAction =
   | { type: "open"; payload?: Partial<BrowserTab> }
   | { type: "close"; id: string }
   | { type: "navigate"; id: string; url: string }
+  | { type: "step-history"; id: string; direction: "back" | "forward" }
   | { type: "update"; id: string; patch: Partial<BrowserTab> };
 
 const starterTabs: BrowserTab[] = [
@@ -24,6 +25,8 @@ const starterTabs: BrowserTab[] = [
     url: "https://openai.com",
     accent: "#67e8f9",
     status: "idle",
+    history: ["https://openai.com"],
+    historyIndex: 0,
     canGoBack: false,
     canGoForward: false,
     isPinned: true
@@ -34,6 +37,8 @@ const starterTabs: BrowserTab[] = [
     url: "https://www.wikipedia.org",
     accent: "#f59e0b",
     status: "idle",
+    history: ["https://www.wikipedia.org"],
+    historyIndex: 0,
     canGoBack: false,
     canGoForward: false
   },
@@ -43,6 +48,8 @@ const starterTabs: BrowserTab[] = [
     url: "https://wiki.termux.com",
     accent: "#34d399",
     status: "idle",
+    history: ["https://wiki.termux.com"],
+    historyIndex: 0,
     canGoBack: false,
     canGoForward: false
   }
@@ -62,6 +69,8 @@ function createTab(payload?: Partial<BrowserTab>): BrowserTab {
     url,
     accent: payload?.accent ?? "#a78bfa",
     status: payload?.status ?? "idle",
+    history: payload?.history ?? [url],
+    historyIndex: payload?.historyIndex ?? 0,
     canGoBack: false,
     canGoForward: false,
     isPinned: payload?.isPinned
@@ -113,12 +122,54 @@ function reducer(state: BrowserState, action: BrowserAction): BrowserState {
             ? {
                 ...entry,
                 url,
+                history:
+                  entry.history[entry.historyIndex] === url
+                    ? entry.history
+                    : [...entry.history.slice(0, entry.historyIndex + 1), url],
+                historyIndex:
+                  entry.history[entry.historyIndex] === url
+                    ? entry.historyIndex
+                    : entry.historyIndex + 1,
                 title: entry.title === "New tab" ? getDomainLabel(url) : entry.title,
-                status: "loading"
+                status: "loading",
+                canGoBack:
+                  entry.history[entry.historyIndex] === url
+                    ? entry.historyIndex > 0
+                    : entry.historyIndex + 1 > 0,
+                canGoForward: false
               }
             : entry
         ),
         draftUrl: state.activeTabId === action.id ? url : state.draftUrl
+      };
+    }
+    case "step-history": {
+      const tabs = state.tabs.map((entry) => {
+        if (entry.id !== action.id) {
+          return entry;
+        }
+
+        const nextIndex =
+          action.direction === "back"
+            ? Math.max(0, entry.historyIndex - 1)
+            : Math.min(entry.history.length - 1, entry.historyIndex + 1);
+        const nextUrl = entry.history[nextIndex] ?? entry.url;
+
+        return {
+          ...entry,
+          url: nextUrl,
+          historyIndex: nextIndex,
+          status: "loading",
+          canGoBack: nextIndex > 0,
+          canGoForward: nextIndex < entry.history.length - 1
+        };
+      });
+      const activeTab = tabs.find((entry) => entry.id === state.activeTabId);
+
+      return {
+        ...state,
+        tabs,
+        draftUrl: activeTab ? activeTab.url : state.draftUrl
       };
     }
     case "update": {
