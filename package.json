@@ -6,11 +6,16 @@
   "main": "dist/electron/main.js",
   "type": "module",
   "scripts": {
-    "dev": "node ./scripts/dev.mjs",
-    "build": "npm run typecheck && vite build && tsc -p tsconfig.electron.json",
+    "dev": "npm run dev:electron",
+    "dev:electron": "node ./scripts/dev.mjs",
+    "build": "npm run build:web && npm run build:electron",
+    "build:web": "vite build",
+    "build:electron": "npm run typecheck && tsc -p tsconfig.electron.json",
     "start": "npm run build && electron .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "dev:worker": "npm run build:web && wrangler dev",
+    "deploy:worker": "npm run build:web && wrangler deploy"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -23,6 +28,7 @@
     "@vitejs/plugin-react": "^4.5.0",
     "electron": "^35.3.0",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "wrangler": "^4.0.0"
   }
 }
