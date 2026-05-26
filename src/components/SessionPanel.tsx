@@ -32,8 +32,8 @@ export function SessionPanel({
           <strong>{engine}</strong>
         </div>
         <div>
-          <span>Display</span>
-          <strong>Adaptive UI</strong>
+          <span>Delivery</span>
+          <strong>{platform}</strong>
         </div>
       </div>
 
